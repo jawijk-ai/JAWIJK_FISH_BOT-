@@ -8,9 +8,7 @@ import android.app.NotificationManager
 import android.os.Build
 
 class TimerReceiver : BroadcastReceiver() {
-
     override fun onReceive(context: Context, intent: Intent?) {
-
         val manager = context.getSystemService(
             Context.NOTIFICATION_SERVICE
         ) as NotificationManager
