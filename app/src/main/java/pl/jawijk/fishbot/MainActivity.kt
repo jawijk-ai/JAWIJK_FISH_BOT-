@@ -47,11 +47,10 @@ class MainActivity : Activity() {
     private var analysisRunning = false
     private var scanInProgress = false
     private var scanInterval = 30000L
-
     private var selectedCategory = "Ryby podstawowe"
     private var selectedFish = ""
-
     private var scanCount = 0
+    private var wasFound = false
 
     private val scanRunnable = object : Runnable {
         override fun run() {
@@ -481,7 +480,6 @@ class MainActivity : Activity() {
                     if (!/^[0-9]+$/.test(level)) return;
 
                     let fishCell = cells[1];
-
                     let images = fishCell.querySelectorAll("img");
 
                     images.forEach(function(img) {
@@ -837,6 +835,7 @@ class MainActivity : Activity() {
         analysisRunning = true
         scanInProgress = false
         scanCount = 0
+        wasFound = false
 
         startButton.isEnabled = false
         stopButton.isEnabled = true
@@ -851,11 +850,8 @@ class MainActivity : Activity() {
     private fun stopAnalysis() {
 
         analysisRunning = false
-        scanInProgress = false
 
         handler.removeCallbacks(scanRunnable)
-
-        clearHighlights()
 
         startButton.isEnabled = true
         stopButton.isEnabled = true
@@ -935,8 +931,8 @@ class MainActivity : Activity() {
                                 rect.height < 8 ||
                                 rect.bottom < 0 ||
                                 rect.right < 0 ||
-                                rect.top > window.innerHeight ||
-                                rect.left > window.innerWidth
+                                rect.top > doc.defaultView.innerHeight ||
+                                rect.left > doc.defaultView.innerWidth
                             ) {
                                 return;
                             }
@@ -994,8 +990,7 @@ class MainActivity : Activity() {
                                 selectedName.toLowerCase().startsWith("ryba #")
                             ) {
 
-                                let id = selectedName
-                                    .replace(/[^0-9]/g, "");
+                                let id = selectedName.replace(/[^0-9]/g, "");
 
                                 if (id.length > 0) {
                                     matched = values.some(function(v) {
@@ -1028,90 +1023,8 @@ class MainActivity : Activity() {
 
                 search(document);
 
-                if (images.length === 0) {
-                    return JSON.stringify({
-                        found: false,
-                        count: 0,
-                        canvases: canvases,
-                        frames: frames
-                    });
-                }
-
-                let marked = [];
-
-                images.forEach(function(img) {
-
-                    let oldOutline = img.style.outline;
-                    let oldShadow = img.style.boxShadow;
-
-                    img.style.setProperty(
-                        "outline",
-                        "5px solid red",
-                        "important"
-                    );
-
-                    img.style.setProperty(
-                        "box-shadow",
-                        "0 0 20px red",
-                        "important"
-                    );
-
-                    marked.push({
-                        img: img,
-                        outline: oldOutline,
-                        shadow: oldShadow
-                    });
-                });
-
-                setTimeout(function() {
-
-                    marked.forEach(function(item) {
-                        item.img.style.setProperty(
-                            "outline",
-                            "none",
-                            "important"
-                        );
-
-                        item.img.style.setProperty(
-                            "box-shadow",
-                            "none",
-                            "important"
-                        );
-                    });
-
-                }, 300);
-
-                setTimeout(function() {
-
-                    marked.forEach(function(item) {
-
-                        item.img.style.setProperty(
-                            "outline",
-                            "5px solid red",
-                            "important"
-                        );
-
-                        item.img.style.setProperty(
-                            "box-shadow",
-                            "0 0 20px red",
-                            "important"
-                        );
-                    });
-
-                }, 450);
-
-                setTimeout(function() {
-
-                    marked.forEach(function(item) {
-
-                        item.img.style.outline = item.outline;
-                        item.img.style.boxShadow = item.shadow;
-                    });
-
-                }, 900);
-
                 return JSON.stringify({
-                    found: true,
+                    found: images.length > 0,
                     count: images.length,
                     canvases: canvases,
                     frames: frames
@@ -1120,7 +1033,9 @@ class MainActivity : Activity() {
             })();
         """
 
-        gameWebView.evaluateJavascript(js) { result ->
+        val activeWebView = popupWebView ?: gameWebView
+
+        activeWebView.evaluateJavascript(js) { result ->
 
             try {
 
@@ -1140,24 +1055,35 @@ class MainActivity : Activity() {
 
                 scanCount++
 
-                scanStatus.text = if (found) {
+                if (found) {
 
-                    "ZNALEZIONO PASUJĄCY OBRAZ\n" +
-                    "Surowiec: $selectedFish\n" +
-                    "Pasujące obrazy: $count\n" +
-                    "Skan nr: $scanCount\n" +
-                    "Canvas: $canvases\n" +
-                    "Ramki: $frames\n" +
-                    "Obrazy oznaczono dwukrotnie."
+                    if (!wasFound) {
+                        scanStatus.text =
+                            "ZNALEZIONO SUROWIEC!\n" +
+                            "Surowiec: $selectedFish\n" +
+                            "Pasujące obrazy: $count\n" +
+                            "Skan nr: $scanCount\n" +
+                            "Możesz teraz sam kliknąć surowiec."
+                    } else {
+                        scanStatus.text =
+                            "SUROWIEC NADAL WIDOCZNY\n" +
+                            "Surowiec: $selectedFish\n" +
+                            "Pasujące obrazy: $count\n" +
+                            "Skan nr: $scanCount"
+                    }
+
+                    wasFound = true
 
                 } else {
 
-                    "NIE ZNALEZIONO PASUJĄCEGO OBRAZU\n" +
-                    "Wybrany surowiec: $selectedFish\n" +
-                    "Skan nr: $scanCount\n" +
-                    "Canvas: $canvases\n" +
-                    "Ramki: $frames\n" +
-                    "Strona może używać grafiki Canvas/WebGL."
+                    scanStatus.text =
+                        "SZUKAM SUROWCA\n" +
+                        "Wybrany: $selectedFish\n" +
+                        "Skan nr: $scanCount\n" +
+                        "Canvas: $canvases\n" +
+                        "Ramki: $frames"
+
+                    wasFound = false
                 }
 
             } catch (e: Exception) {
@@ -1180,25 +1106,6 @@ class MainActivity : Activity() {
                 }
             }
         }
-    }
-
-    private fun clearHighlights() {
-
-        val js = """
-            (function() {
-
-                document.querySelectorAll("img").forEach(function(img) {
-                    img.style.removeProperty("outline");
-                    img.style.removeProperty("box-shadow");
-                });
-
-                return true;
-
-            })();
-        """
-
-        gameWebView.evaluateJavascript(js, null)
-        popupWebView?.evaluateJavascript(js, null)
     }
 
     @Suppress("DEPRECATION")
